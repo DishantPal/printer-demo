@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRS Printer Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style> body { user-select: none; } </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen flex flex-col p-6 font-sans">
+
+    <header class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">🖨️ CRS Printer Service</h1>
+            <p class="text-sm text-slate-500">HP M612 Controller</p>
+        </div>
+        <span class="bg-green-100 text-green-700 px-3 py-1 text-xs font-bold rounded-full">RUNNING</span>
+    </header>
+
+    <div class="bg-white rounded-xl shadow p-6 mb-6">
+        <h2 class="text-xs font-bold uppercase text-slate-400 mb-4">Network Config</h2>
+        <div class="grid grid-cols-2 gap-6">
+            <div>
+                <label class="block text-xs font-bold mb-1">API Endpoint</label>
+                <code id="apiUrl" class="block w-full bg-slate-50 p-2 rounded text-sm border">Loading...</code>
+            </div>
+            <div>
+                <label class="block text-xs font-bold mb-1">Printer IP</label>
+                <div class="flex gap-2">
+                    <input id="printerIp" class="flex-1 border rounded p-2 text-sm" placeholder="192.168.1.50">
+                    <button onclick="scanTrays()" id="scanBtn" class="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700">Scan Trays</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow p-6 mb-6 flex-1 flex flex-col">
+        <h2 class="text-xs font-bold uppercase text-slate-400 mb-4">Tray Mappings</h2>
+        
+        <div class="flex gap-2 mb-4">
+            <input id="newType" class="flex-1 border rounded p-2 text-sm" placeholder="Doc Type (e.g. prescription)">
+            <select id="newTray" class="flex-1 border rounded p-2 text-sm">
+                <option value="auto">auto</option>
+            </select>
+            <button onclick="addMapping()" class="bg-slate-900 text-white px-6 rounded text-sm font-bold">+ Add</button>
+        </div>
+
+        <div id="mappingList" class="flex-1 overflow-y-auto space-y-2"></div>
+    </div>
+
+    <div class="bg-slate-900 rounded-xl p-4 h-40 overflow-y-auto font-mono text-xs text-slate-300" id="logs"></div>
+
+    <script>
+        // CRITICAL: Use window.require because project is ESM
+        const { ipcRenderer } = window.require('electron');
+
+        let state = { mappings: [], printerIp: '' };
+
+        async function init() {
+            const data = await ipcRenderer.invoke('get-init-data');
+            document.getElementById('apiUrl').innerText = data.apiUrl;
+            document.getElementById('printerIp').value = data.printerIp;
+            state.mappings = data.mappings || [];
+            renderMappings();
+            log('INFO', 'System Ready');
+            
+            // Auto-scan if IP exists
+            if(data.printerIp) scanTrays(true); 
+        }
+
+        async function scanTrays(silent = false) {
+            const ip = document.getElementById('printerIp').value;
+            const btn = document.getElementById('scanBtn');
+            if (!silent) { btn.disabled = true; btn.innerText = 'Scanning...'; }
+
+            // Save IP first
+            await ipcRenderer.invoke('save-config', { printerIp: ip });
+
+            const res = await ipcRenderer.invoke('scan-trays');
+            if (res.success) {
+                const select = document.getElementById('newTray');
+                select.innerHTML = res.trays.map(t => `<option value="${t}">${t}</option>`).join('');
+                if (!silent) alert('Trays Found: ' + res.trays.join(', '));
+            } else {
+                log('ERROR', res.error);
+                if (!silent) alert('Scan Failed');
+            }
+
+            if (!silent) { btn.disabled = false; btn.innerText = 'Scan Trays'; }
+        }
+
+        async function addMapping() {
+            const name = document.getElementById('newType').value;
+            const tray = document.getElementById('newTray').value;
+            if (!name) return;
+
+            state.mappings.push({ id: Date.now(), name, tray });
+            await ipcRenderer.invoke('save-config', { mappings: state.mappings });
+            document.getElementById('newType').value = '';
+            renderMappings();
+        }
+
+        async function deleteMapping(id) {
+            state.mappings = state.mappings.filter(m => m.id !== id);
+            await ipcRenderer.invoke('save-config', { mappings: state.mappings });
+            renderMappings();
+        }
+
+        function renderMappings() {
+            const list = document.getElementById('mappingList');
+            list.innerHTML = state.mappings.map(m => `
+                <div class="flex justify-between items-center bg-slate-50 p-3 rounded border">
+                    <div>
+                        <span class="font-bold">${m.name}</span>
+                        <span class="text-slate-400 mx-2">→</span>
+                        <span class="text-blue-600 font-mono">${m.tray}</span>
+                    </div>
+                    <button onclick="deleteMapping(${m.id})" class="text-red-500 text-xs hover:underline">Remove</button>
+                </div>
+            `).join('');
+        }
+
+        function log(type, msg) {
+            const box = document.getElementById('logs');
+            box.innerHTML += `<div><span class="${type==='ERROR'?'text-red-400':'text-blue-400'} font-bold">[${type}]</span> ${msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        ipcRenderer.on('new-log', (e, entry) => log(entry.type, entry.message));
+
+        init();
+    </script>
+</body>
+</html>

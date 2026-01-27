@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print API Tester</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            🖨️ Client-Side Tester
+        </h1>
+
+        <div class="space-y-4 mb-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">API Endpoint URL</label>
+                <input type="text" id="apiUrl" value="http://localhost:4000/print" 
+                    class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm">
+                <p class="text-xs text-gray-500 mt-1">Copy this from your Electron App dashboard.</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Document Type (Mapping Name)</label>
+                <input type="text" id="docType" placeholder="e.g. prescription" value="test"
+                    class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
+                <p class="text-xs text-gray-500 mt-1">Must match a name you configured in the App.</p>
+            </div>
+        </div>
+
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer relative mb-6">
+            <input type="file" id="fileInput" accept="application/pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect()">
+            <div id="uploadText" class="text-gray-500">
+                <span class="text-3xl block mb-2">📄</span>
+                <span class="font-medium">Click to select a PDF</span>
+            </div>
+        </div>
+
+        <button onclick="sendPrintJob()" id="printBtn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+            Send Print Command
+        </button>
+
+        <div id="statusBox" class="mt-6 p-4 bg-gray-900 text-green-400 font-mono text-xs rounded h-32 overflow-y-auto hidden">
+        </div>
+    </div>
+
+    <script>
+        let selectedFileBase64 = null;
+
+        function log(msg, isError = false) {
+            const box = document.getElementById('statusBox');
+            box.classList.remove('hidden');
+            const color = isError ? 'text-red-400' : 'text-green-400';
+            box.innerHTML += `<div class="${color} mb-1">> ${msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function handleFileSelect() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (file) {
+                document.getElementById('uploadText').innerHTML = `<span class="text-gray-800 font-bold">${file.name}</span><br><span class="text-xs">${(file.size/1024).toFixed(1)} KB</span>`;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // Extract RAW Base64 (remove the "data:application/pdf;base64," prefix)
+                    const rawBase64 = e.target.result.split(',')[1];
+                    selectedFileBase64 = rawBase64;
+                    log(`File loaded: ${file.name}`);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function sendPrintJob() {
+            const url = document.getElementById('apiUrl').value;
+            const docType = document.getElementById('docType').value;
+            const btn = document.getElementById('printBtn');
+
+            if (!selectedFileBase64) return alert("Please select a PDF file first.");
+            if (!docType) return alert("Please enter a Document Type mapping.");
+
+            btn.disabled = true;
+            btn.innerText = "Sending...";
+            log(`Sending job to ${url}...`);
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        docType: docType,
+                        base64: selectedFileBase64
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    log(`SUCCESS! Job ID: ${result.jobId}`);
+                    alert("Print Job Sent Successfully!");
+                } else {
+                    throw new Error(result.error || "Unknown error");
+                }
+
+            } catch (error) {
+                log(`ERROR: ${error.message}`, true);
+                console.error(error);
+                alert("Failed: " + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Send Print Command";
+            }
+        }
+    </script>
+</body>
+</html>
