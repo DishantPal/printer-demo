@@ -77,8 +77,8 @@ const PrinterService = {
         data: buffer
       };
 
-      log('INFO', `Sending job to ${PrinterService.getUrl()} using tray: ${trayName || 'auto'}`);
-      log('INFO', JSON.stringify(msg, null, 2));
+      addLog('INFO', `Sending job to ${PrinterService.getUrl()} using tray: ${trayName || 'auto'}`);
+      addLog('INFO', JSON.stringify(msg, null, 2));
 
       printer.execute("Print-Job", msg, (err, res) => {
         if (err) return reject(err);
