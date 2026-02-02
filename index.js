@@ -78,11 +78,14 @@ const PrinterService = {
       };
 
       addLog('INFO', `Sending job to ${PrinterService.getUrl()} using tray: ${trayName || 'auto'}`);
-      addLog('INFO', JSON.stringify(msg, null, 2));
 
       printer.execute("Print-Job", msg, (err, res) => {
         if (err) return reject(err);
-        if (res.statusCode !== 'successful-ok') return reject(res.statusCode);
+        if (res.statusCode !== 'successful-ok' && res.statusCode !== 'successful-ok-ignored-or-substituted-attributes') {
+          addLog('ERROR', `Print Failed: ${res.statusCode}`);
+          return reject(res.statusCode);
+        }
+        addLog('SUCCESS', `Printed (Job ${res['job-attributes-tag']['job-id']})`);
         resolve(res['job-attributes-tag']['job-id']);
       });
     });
