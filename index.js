@@ -71,9 +71,14 @@ const PrinterService = {
           "job-name": "API-Print",
           "document-format": "application/pdf"
         },
-        "job-attributes-tag": { "media-source": trayName },
+        "job-attributes-tag": { 
+          ...(trayName !== 'auto' && { "media": trayName })
+        },
         data: buffer
       };
+
+      log('INFO', `Sending job to ${PrinterService.getUrl()} using tray: ${trayName || 'auto'}`);
+      log('INFO', JSON.stringify(msg, null, 2));
 
       printer.execute("Print-Job", msg, (err, res) => {
         if (err) return reject(err);
