@@ -7,7 +7,8 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:print-watcher": "node test-print-watcher.js"
   },
   "keywords": [],
   "author": "CrossEven",
@@ -19,8 +20,7 @@
     "electron-log": "^5.4.3",
     "electron-store": "^11.0.2",
     "express": "^5.2.1",
-    "ip": "^2.0.1",
-    "ipp": "^2.0.1"
+    "pdf-to-printer": "^5.6.1"
   },
   "devDependencies": {
     "electron": "^40.0.0",

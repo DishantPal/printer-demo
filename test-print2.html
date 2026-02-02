@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Printer Tray Acceptance Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-6 font-sans">
+
+    <div class="max-w-2xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+        
+        <div class="bg-slate-900 p-6 text-white flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold">🖨️ Acceptance Test Suite</h1>
+                <p class="text-slate-400 text-sm">Hardware Tray Verification</p>
+            </div>
+            <div id="connectionStatus" class="bg-yellow-500 text-xs font-bold px-3 py-1 rounded-full text-white animate-pulse">
+                CHECKING API...
+            </div>
+        </div>
+
+        <div class="p-8 grid grid-cols-2 gap-4">
+            
+            <button onclick="generateAndPrint('Envelope', 'TEST: ENVELOPE PRINT', 'landscape')" 
+                class="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl hover:bg-blue-50 hover:border-blue-500 transition-all group">
+                <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">✉️</span>
+                <span class="font-bold text-slate-700">Print Envelope</span>
+                <span class="text-xs text-slate-400 mt-1">Triggers 'Envelope' Mapping</span>
+            </button>
+
+            <button onclick="generateAndPrint('DMV Form', 'TEST: DMV FORM (Legal/Standard)', 'portrait')" 
+                class="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl hover:bg-purple-50 hover:border-purple-500 transition-all group">
+                <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">📝</span>
+                <span class="font-bold text-slate-700">Print DMV Form</span>
+                <span class="text-xs text-slate-400 mt-1">Triggers 'DMV Form' Mapping</span>
+            </button>
+
+            <button onclick="generateAndPrint('Prescription', 'TEST: PRESCRIPTION PAD', 'portrait')" 
+                class="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl hover:bg-green-50 hover:border-green-500 transition-all group">
+                <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">💊</span>
+                <span class="font-bold text-slate-700">Print Prescription</span>
+                <span class="text-xs text-slate-400 mt-1">Triggers 'Prescription' Mapping</span>
+            </button>
+
+            <button onclick="generateAndPrint('Cover Letter', 'TEST: STANDARD COVER LETTER', 'portrait')" 
+                class="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-xl hover:bg-slate-100 hover:border-slate-500 transition-all group">
+                <span class="text-3xl mb-2 group-hover:scale-110 transition-transform">📄</span>
+                <span class="font-bold text-slate-700">Print Cover Letter</span>
+                <span class="text-xs text-slate-400 mt-1">Triggers 'Cover Letter' Mapping</span>
+            </button>
+
+        </div>
+
+        <div class="bg-slate-900 text-slate-300 p-4 text-xs font-mono h-48 overflow-y-auto border-t border-slate-800" id="console">
+            <div class="text-slate-500 mb-2">// System Logs Initialized...</div>
+        </div>
+    </div>
+
+    <div class="mt-4 text-slate-400 text-xs">
+        Targeting API: <input id="apiUrl" value="http://localhost:4000/print" class="bg-transparent border-b border-slate-300 focus:outline-none px-1">
+    </div>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+
+        // Auto-check connection on load
+        checkConnection();
+
+        async function checkConnection() {
+            const url = document.getElementById('apiUrl').value.replace('/print', '/status');
+            const statusBadge = document.getElementById('connectionStatus');
+            try {
+                // Short timeout fetch to check if server is up
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
+                await fetch(url, { signal: controller.signal });
+                
+                statusBadge.innerText = "ONLINE";
+                statusBadge.className = "bg-green-500 text-xs font-bold px-3 py-1 rounded-full text-white";
+                log("✅ Connected to Printer Service.");
+            } catch (e) {
+                statusBadge.innerText = "OFFLINE";
+                statusBadge.className = "bg-red-500 text-xs font-bold px-3 py-1 rounded-full text-white";
+                log("⚠️ Cannot find Printer Service. Is the App running?");
+            }
+        }
+
+        async function generateAndPrint(mappingName, textContent, orientation) {
+            log(`-----------------------------------`);
+            log(`⚙️ Generating PDF for: ${mappingName}...`);
+
+            try {
+                // 1. Generate PDF in Browser Memory
+                const doc = new jsPDF({ orientation: orientation });
+                
+                // Add big visible text to identify the paper
+                doc.setFontSize(22);
+                doc.text(textContent, 20, 30);
+                
+                doc.setFontSize(12);
+                doc.text(`Doc Type: ${mappingName}`, 20, 50);
+                doc.text(`Timestamp: ${new Date().toLocaleString()}`, 20, 60);
+                
+                // Draw a box to show margins
+                doc.setLineWidth(1);
+                doc.rect(10, 10, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 20);
+
+                // Convert to Base64 (remove data URI prefix)
+                const pdfBase64 = doc.output('datauristring').split(',')[1];
+                
+                log(`📤 Sending to Printer (Mapping: "${mappingName}")...`);
+
+                // 2. Send to Local API
+                const apiUrl = document.getElementById('apiUrl').value;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        docType: mappingName,
+                        base64: pdfBase64
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    log(`✅ SUCCESS! Job Sent. ID: ${result.jobId}`);
+                    alert(`Printed Successfully!\nCheck the printer for: ${mappingName}`);
+                } else {
+                    throw new Error(result.error || "Unknown Server Error");
+                }
+
+            } catch (error) {
+                log(`❌ ERROR: ${error.message}`);
+                alert("Print Failed: " + error.message);
+            }
+        }
+
+        function log(msg) {
+            const box = document.getElementById('console');
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            box.innerHTML += `<div><span class="opacity-50">[${time}]</span> ${msg}</div>`;
+            box.scrollTop = box.scrollHeight;
+        }
+    </script>
+</body>
+</html>

@@ -12,35 +12,35 @@
     <header class="flex justify-between items-center mb-6">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">🖨️ CRS Printer Service</h1>
-            <p class="text-sm text-slate-500">HP M612 Controller</p>
+            <p class="text-sm text-slate-500">Windows Spooler Mode</p>
         </div>
         <span class="bg-green-100 text-green-700 px-3 py-1 text-xs font-bold rounded-full">RUNNING</span>
     </header>
 
     <div class="bg-white rounded-xl shadow p-6 mb-6">
-        <h2 class="text-xs font-bold uppercase text-slate-400 mb-4">Network Config</h2>
+        <h2 class="text-xs font-bold uppercase text-slate-400 mb-4">Service Status</h2>
         <div class="grid grid-cols-2 gap-6">
             <div>
                 <label class="block text-xs font-bold mb-1">API Endpoint</label>
                 <code id="apiUrl" class="block w-full bg-slate-50 p-2 rounded text-sm border">Loading...</code>
             </div>
             <div>
-                <label class="block text-xs font-bold mb-1">Printer IP</label>
-                <div class="flex gap-2">
-                    <input id="printerIp" class="flex-1 border rounded p-2 text-sm" placeholder="192.168.1.50">
-                    <button onclick="scanTrays()" id="scanBtn" class="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700">Scan Trays</button>
-                </div>
+                <label class="block text-xs font-bold mb-1">Available Printers</label>
+                <button onclick="scanPrinters()" id="scanBtn" class="w-full bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-700">
+                    Refresh Printer List
+                </button>
             </div>
         </div>
     </div>
 
     <div class="bg-white rounded-xl shadow p-6 mb-6 flex-1 flex flex-col">
-        <h2 class="text-xs font-bold uppercase text-slate-400 mb-4">Tray Mappings</h2>
+        <h2 class="text-xs font-bold uppercase text-slate-400 mb-4">Printer Mappings</h2>
+        <p class="text-xs text-slate-500 mb-2">Map a Document Type to a specific Windows Printer queue.</p>
         
         <div class="flex gap-2 mb-4">
-            <input id="newType" class="flex-1 border rounded p-2 text-sm" placeholder="Doc Type (e.g. prescription)">
-            <select id="newTray" class="flex-1 border rounded p-2 text-sm">
-                <option value="auto">auto</option>
+            <input id="newType" class="flex-1 border rounded p-2 text-sm" placeholder="Doc Type (e.g. PLACARD)">
+            <select id="newPrinter" class="flex-1 border rounded p-2 text-sm bg-white">
+                <option value="" disabled selected>Select a Printer...</option>
             </select>
             <button onclick="addMapping()" class="bg-slate-900 text-white px-6 rounded text-sm font-bold">+ Add</button>
         </div>
@@ -51,53 +51,64 @@
     <div class="bg-slate-900 rounded-xl p-4 h-40 overflow-y-auto font-mono text-xs text-slate-300" id="logs"></div>
 
     <script>
-        // CRITICAL: Use window.require because project is ESM
         const { ipcRenderer } = window.require('electron');
 
-        let state = { mappings: [], printerIp: '' };
+        let state = { mappings: [] };
 
         async function init() {
             const data = await ipcRenderer.invoke('get-init-data');
             document.getElementById('apiUrl').innerText = data.apiUrl;
-            document.getElementById('printerIp').value = data.printerIp;
             state.mappings = data.mappings || [];
             renderMappings();
             log('INFO', 'System Ready');
             
-            // Auto-scan if IP exists
-            if(data.printerIp) scanTrays(true); 
+            // Auto-scan on startup to populate dropdowns
+            scanPrinters(true);
         }
 
-        async function scanTrays(silent = false) {
-            const ip = document.getElementById('printerIp').value;
+        async function scanPrinters(silent = false) {
             const btn = document.getElementById('scanBtn');
-            if (!silent) { btn.disabled = true; btn.innerText = 'Scanning...'; }
+            if (!silent) { btn.disabled = true; btn.innerText = 'Scanning Windows...'; }
 
-            // Save IP first
-            await ipcRenderer.invoke('save-config', { printerIp: ip });
-
-            const res = await ipcRenderer.invoke('scan-trays');
+            // Call the new handler
+            const res = await ipcRenderer.invoke('scan-printers');
+            
             if (res.success) {
-                const select = document.getElementById('newTray');
-                select.innerHTML = res.trays.map(t => `<option value="${t}">${t}</option>`).join('');
-                if (!silent) alert('Trays Found: ' + res.trays.join(', '));
+                const select = document.getElementById('newPrinter');
+                // Save current selection if any
+                const currentVal = select.value;
+                
+                select.innerHTML = `<option value="" disabled>Select a Printer...</option>` + 
+                                   res.printers.map(p => `<option value="${p}">${p}</option>`).join('');
+                
+                if(currentVal) select.value = currentVal;
+
+                if (!silent) log('INFO', `Found ${res.printers.length} printers.`);
             } else {
                 log('ERROR', res.error);
                 if (!silent) alert('Scan Failed');
             }
 
-            if (!silent) { btn.disabled = false; btn.innerText = 'Scan Trays'; }
+            if (!silent) { btn.disabled = false; btn.innerText = 'Refresh Printer List'; }
         }
 
         async function addMapping() {
             const name = document.getElementById('newType').value;
-            const tray = document.getElementById('newTray').value;
-            if (!name) return;
+            const printer = document.getElementById('newPrinter').value;
+            
+            if (!name) { alert("Enter a Doc Type name"); return; }
+            if (!printer) { alert("Select a printer from the list"); return; }
 
-            state.mappings.push({ id: Date.now(), name, tray });
+            // Remove existing mapping for this name if it exists (overwrite)
+            state.mappings = state.mappings.filter(m => m.name !== name);
+
+            state.mappings.push({ id: Date.now(), name, printer });
+            
             await ipcRenderer.invoke('save-config', { mappings: state.mappings });
+            
             document.getElementById('newType').value = '';
             renderMappings();
+            log('INFO', `Mapped "${name}" -> "${printer}"`);
         }
 
         async function deleteMapping(id) {
@@ -110,12 +121,12 @@
             const list = document.getElementById('mappingList');
             list.innerHTML = state.mappings.map(m => `
                 <div class="flex justify-between items-center bg-slate-50 p-3 rounded border">
-                    <div>
-                        <span class="font-bold">${m.name}</span>
-                        <span class="text-slate-400 mx-2">→</span>
-                        <span class="text-blue-600 font-mono">${m.tray}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold bg-white px-2 py-1 rounded border text-xs">${m.name}</span>
+                        <span class="text-slate-400">→</span>
+                        <span class="text-blue-600 font-mono text-sm">${m.printer}</span>
                     </div>
-                    <button onclick="deleteMapping(${m.id})" class="text-red-500 text-xs hover:underline">Remove</button>
+                    <button onclick="deleteMapping(${m.id})" class="text-red-500 text-xs hover:text-red-700 font-bold px-2">X</button>
                 </div>
             `).join('');
         }

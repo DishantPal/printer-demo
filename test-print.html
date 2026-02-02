@@ -23,9 +23,16 @@
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Document Type (Mapping Name)</label>
-                <input type="text" id="docType" placeholder="e.g. prescription" value="test"
+                <input list="printer-mapping" type="text" id="docType" placeholder="e.g. prescription" value="test"
                     class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none">
                 <p class="text-xs text-gray-500 mt-1">Must match a name you configured in the App.</p>
+
+                <datalist id="printer-mapping">
+                    <option value="ENVELOPE"></option>
+                    <option value="COVER"></option>
+                    <option value="PLACARD"></option>
+                    <option value="PRESCRIPTION"></option>
+                </datalist>
             </div>
         </div>
 

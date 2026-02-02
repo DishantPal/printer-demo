@@ -23,12 +23,9 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1
-      ip:
-        specifier: ^2.0.1
-        version: 2.0.1
-      ipp:
-        specifier: ^2.0.1
-        version: 2.0.1
+      pdf-to-printer:
+        specifier: ^5.6.1
+        version: 5.6.1
     devDependencies:
       electron:
         specifier: ^40.0.0
@@ -801,16 +798,9 @@ packages:
     resolution: {integrity: sha512-XXADHxXmvT9+CRxhXg56LJovE+bmWnEWB78LB83VZTprKTmaC5QfruXocxzTZ2Kl0DNwKuBdlIhjL8LeY8Sf8Q==}
     engines: {node: '>= 12'}
 
-  ip@2.0.1:
-    resolution: {integrity: sha512-lJUL9imLTNi1ZfXT+DU6rBBdbiKGBuay9B6xGSPVjUeQwaH1RIGqef8RZkUtHioLmSNpPR5M4HVKJGm1j8FWVQ==}
-
   ipaddr.js@1.9.1:
     resolution: {integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==}
     engines: {node: '>= 0.10'}
-
-  ipp@2.0.1:
-    resolution: {integrity: sha512-p5dO2BXAVDnkv6IhUBupwydkq5/uw+DE+MGXnYzziNK1AtuLgbT9dFfJ3f8pA+J21n43TYipm6et/hTDEFJU/A==}
-    engines: {node: <4.0.0}
 
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
@@ -1123,6 +1113,9 @@ packages:
 
   path-to-regexp@8.3.0:
     resolution: {integrity: sha512-7jdwVIRtsP8MYpdXSwOS0YdD0Du+qOoF/AEPIt88PcCFrZCzx41oxku1jD88hZBwbNUIEfpqvuhjFaMAqMTWnA==}
+
+  pdf-to-printer@5.6.1:
+    resolution: {integrity: sha512-VlwOPVv8LmCGVnJKnPZaCqUSB0wm/eTmdrsXqHG2lpkIbwnlsBXIVIAipQgdsubIssbJAutyN5yOCB1CnYcMVw==}
 
   pe-library@0.4.1:
     resolution: {integrity: sha512-eRWB5LBz7PpDu4PUlwT0PhnQfTQJlDDdPa35urV4Osrm0t0AqQFGn+UIkU3klZvwJ8KPO3VbBFsXquA6p6kqZw==}
@@ -2548,11 +2541,7 @@ snapshots:
 
   ip-address@10.1.0: {}
 
-  ip@2.0.1: {}
-
   ipaddr.js@1.9.1: {}
-
-  ipp@2.0.1: {}
 
   is-fullwidth-code-point@3.0.0: {}
 
@@ -2835,6 +2824,8 @@ snapshots:
       minipass: 7.1.2
 
   path-to-regexp@8.3.0: {}
+
+  pdf-to-printer@5.6.1: {}
 
   pe-library@0.4.1: {}
 

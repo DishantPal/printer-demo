@@ -1,13 +1,14 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import os from 'node:os'; // We use this import now
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import Store from 'electron-store';
 import log from 'electron-log';
-import ipp from 'ipp';
-import ip from 'ip';
+import ptp from 'pdf-to-printer';
 
 // --- ESM FIXES FOR DIRNAME ---
 const __filename = fileURLToPath(import.meta.url);
@@ -16,7 +17,6 @@ const __dirname = path.dirname(__filename);
 // --- 1. CONFIGURATION ---
 const store = new Store({
   defaults: {
-    printerIp: '192.168.1.50',
     port: 4000,
     mappings: [] 
   }
@@ -24,7 +24,7 @@ const store = new Store({
 
 // Setup Logging
 log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'logs/main.log');
-Object.assign(console, log.functions); // Redirect console.log to file
+Object.assign(console, log.functions); 
 
 let mainWindow;
 let tray;
@@ -40,55 +40,43 @@ function addLog(type, message) {
 
 // --- 2. PRINTER SERVICE ---
 const PrinterService = {
-  getUrl: () => `http://${store.get('printerIp')}:631/ipp/print`,
-
-  scanTrays: () => {
-    return new Promise((resolve, reject) => {
-      const printer = ipp.Printer(PrinterService.getUrl());
-      const msg = { 
-        "operation-attributes-tag": { 
-          "requested-attributes": ["media-source-supported"] 
-        } 
-      };
-      
-      printer.execute("Get-Printer-Attributes", msg, (err, res) => {
-        if (err) return reject(err);
-        if (res.statusCode !== 'successful-ok') return reject(res.statusCode);
-        
-        let trays = res['printer-attributes-tag']['media-source-supported'];
-        if (!Array.isArray(trays)) trays = [trays];
-        resolve(trays);
-      });
-    });
+  
+  // SCAN: Asks Windows for installed printers
+  getPrinters: async () => {
+    try {
+      const printers = await ptp.getPrinters();
+      return printers.map(p => p.name); 
+    } catch (err) {
+      throw err;
+    }
   },
 
-  print: (buffer, trayName) => {
-    return new Promise((resolve, reject) => {
-      const printer = ipp.Printer(PrinterService.getUrl());
-      const msg = {
-        "operation-attributes-tag": {
-          "requesting-user-name": "CRS-Service",
-          "job-name": "API-Print",
-          "document-format": "application/pdf"
-        },
-        "job-attributes-tag": { 
-          ...(trayName !== 'auto' && { "media": trayName })
-        },
-        data: buffer
-      };
+  // PRINT: Buffer -> File -> Windows Queue
+  print: async (buffer, printerName) => {
+    // Create unique temp file
+    const tempFilePath = path.join(os.tmpdir(), `crs_job_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
+    
+    try {
+      addLog('INFO', `Preparing job for: ${printerName}`);
 
-      addLog('INFO', `Sending job to ${PrinterService.getUrl()} using tray: ${trayName || 'auto'}`);
-
-      printer.execute("Print-Job", msg, (err, res) => {
-        if (err) return reject(err);
-        if (res.statusCode !== 'successful-ok' && res.statusCode !== 'successful-ok-ignored-or-substituted-attributes') {
-          addLog('ERROR', `Print Failed: ${res.statusCode}`);
-          return reject(res.statusCode);
-        }
-        addLog('SUCCESS', `Printed (Job ${res['job-attributes-tag']['job-id']})`);
-        resolve(res['job-attributes-tag']['job-id']);
+      // Write Buffer to Disk
+      await fs.promises.writeFile(tempFilePath, buffer);
+      
+      // Send to Windows Spooler
+      await ptp.print(tempFilePath, {
+        printer: printerName
       });
-    });
+
+      return { success: true };
+
+    } catch (err) {
+      throw err;
+    } finally {
+      // Cleanup
+      setTimeout(() => {
+        if (fs.existsSync(tempFilePath)) fs.promises.unlink(tempFilePath).catch(()=>{});
+      }, 2000);
+    }
   }
 };
 
@@ -99,7 +87,7 @@ function startServer() {
   api.use(bodyParser.json({ limit: '50mb' }));
 
   api.get('/status', (req, res) => {
-    res.json({ status: 'online', printer: store.get('printerIp') });
+    res.json({ status: 'online', mode: 'windows-spooler' });
   });
 
   api.post('/print', async (req, res) => {
@@ -110,16 +98,20 @@ function startServer() {
     const mappings = store.get('mappings');
     const config = mappings.find(m => m.name === docType);
 
-    if (!config) {
-      addLog('WARN', `No mapping for: ${docType}`);
-      return res.status(404).json({ error: `No mapping for ${docType}` });
+    // Fallback: If no mapping, try to use docType as the printer name directly
+    let targetPrinter = config ? config.printer : null;
+
+    if (!targetPrinter) {
+        addLog('WARN', `No mapping found for: ${docType}`);
+        return res.status(404).json({ error: `No mapping configured for ${docType}` });
     }
 
     try {
       const buffer = Buffer.from(base64, 'base64');
-      const jobId = await PrinterService.print(buffer, config.tray);
-      addLog('SUCCESS', `Printed ${docType} (Job ${jobId})`);
-      res.json({ success: true, jobId });
+      await PrinterService.print(buffer, targetPrinter);
+      
+      addLog('SUCCESS', `Sent ${docType} to "${targetPrinter}"`);
+      res.json({ success: true });
     } catch (err) {
       addLog('ERROR', `Print Failed: ${err}`);
       res.status(500).json({ error: String(err) });
@@ -128,7 +120,15 @@ function startServer() {
 
   const port = store.get('port');
   server = api.listen(port, () => {
-    addLog('SYSTEM', `Server running at http://${ip.address()}:${port}`);
+    // FIX: Use 'os' directly, not require('os')
+    const nets = os.networkInterfaces();
+    let localIp = 'localhost';
+    for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+            if (net.family === 'IPv4' && !net.internal) localIp = net.address;
+        }
+    }
+    addLog('SYSTEM', `Server listening at http://${localIp}:${port}`);
   });
 }
 
@@ -139,7 +139,7 @@ function createWindow() {
     title: "CRS Printer Service",
     webPreferences: {
       nodeIntegration: true, 
-      contextIsolation: false // Required for simple 2-file architecture
+      contextIsolation: false 
     }
   });
 
@@ -155,7 +155,6 @@ function createWindow() {
 
 function createTray() {
   const iconPath = path.join(__dirname, 'icon.png');
-  // Simple check if icon exists, otherwise empty (prevents crash)
   try { tray = new Tray(iconPath); } catch (e) { tray = new Tray(''); }
 
   const contextMenu = Menu.buildFromTemplate([
@@ -169,22 +168,30 @@ function createTray() {
 }
 
 // --- IPC HANDLERS ---
-ipcMain.handle('get-init-data', () => ({
-  mappings: store.get('mappings'),
-  printerIp: store.get('printerIp'),
-  apiUrl: `http://${ip.address()}:${store.get('port')}/print`
-}));
+ipcMain.handle('get-init-data', () => {
+  // FIX: Use 'os' directly here too
+  const nets = os.networkInterfaces();
+  let localIp = 'localhost';
+  for (const name of Object.keys(nets)) {
+      for (const net of nets[name]) {
+          if (net.family === 'IPv4' && !net.internal) localIp = net.address;
+      }
+  }
+  return {
+    mappings: store.get('mappings'),
+    apiUrl: `http://${localIp}:${store.get('port')}/print`
+  };
+});
 
-ipcMain.handle('save-config', (e, { printerIp, mappings }) => {
-  if (printerIp) store.set('printerIp', printerIp);
+ipcMain.handle('save-config', (e, { mappings }) => {
   if (mappings) store.set('mappings', mappings);
   return true;
 });
 
-ipcMain.handle('scan-trays', async () => {
+ipcMain.handle('scan-printers', async () => {
   try {
-    const trays = await PrinterService.scanTrays();
-    return { success: true, trays };
+    const printers = await PrinterService.getPrinters();
+    return { success: true, printers };
   } catch (e) {
     return { success: false, error: String(e) };
   }
