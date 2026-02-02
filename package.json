@@ -1,6 +1,6 @@
 {
   "name": "crs-printer-service",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "CrossEven Printer Service",
   "main": "index.js",
   "type": "module",
