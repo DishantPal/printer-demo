@@ -90,27 +90,31 @@ function startServer() {
     res.json({ status: 'online', mode: 'windows-spooler' });
   });
 
+  api.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+  });
+
   api.post('/print', async (req, res) => {
-    const { docType, base64 } = req.body;
+    const { printerName, base64 } = req.body;
     
-    if (!docType || !base64) return res.status(400).json({ error: "Missing Data" });
+    if (!printerName || !base64) return res.status(400).json({ error: "Missing Data" });
 
     const mappings = store.get('mappings');
-    const config = mappings.find(m => m.name === docType);
+    const config = mappings.find(m => m.name === printerName);
 
-    // Fallback: If no mapping, try to use docType as the printer name directly
+    // Fallback: If no mapping, try to use printerName as the printer name directly
     let targetPrinter = config ? config.printer : null;
 
     if (!targetPrinter) {
-        addLog('WARN', `No mapping found for: ${docType}`);
-        return res.status(404).json({ error: `No mapping configured for ${docType}` });
+        addLog('WARN', `No mapping found for: ${printerName}`);
+        return res.status(404).json({ error: `No mapping configured for ${printerName}` });
     }
 
     try {
       const buffer = Buffer.from(base64, 'base64');
       await PrinterService.print(buffer, targetPrinter);
       
-      addLog('SUCCESS', `Sent ${docType} to "${targetPrinter}"`);
+      addLog('SUCCESS', `Sent ${printerName} to "${targetPrinter}"`);
       res.json({ success: true });
     } catch (err) {
       addLog('ERROR', `Print Failed: ${err}`);

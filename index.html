@@ -21,7 +21,15 @@
         <h2 class="text-xs font-bold uppercase text-slate-400 mb-4">Service Status</h2>
         <div class="grid grid-cols-2 gap-6">
             <div>
-                <label class="block text-xs font-bold mb-1">API Endpoint</label>
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold mb-1">API Endpoint</label>
+                    <button onclick="navigator.clipboard.writeText(document.getElementById('apiUrl').innerText)" class="text-slate-400 hover:text-slate-700 ml-2 transition-colors" title="Copy API Endpoint">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
                 <code id="apiUrl" class="block w-full bg-slate-50 p-2 rounded text-sm border">Loading...</code>
             </div>
             <div>
@@ -57,7 +65,8 @@
 
         async function init() {
             const data = await ipcRenderer.invoke('get-init-data');
-            document.getElementById('apiUrl').innerText = data.apiUrl;
+            // document.getElementById('apiUrl').innerText = data.apiUrl;
+            document.getElementById('apiUrl').innerText = "http://localhost:4000";
             state.mappings = data.mappings || [];
             renderMappings();
             log('INFO', 'System Ready');
@@ -125,6 +134,12 @@
                         <span class="font-bold bg-white px-2 py-1 rounded border text-xs">${m.name}</span>
                         <span class="text-slate-400">→</span>
                         <span class="text-blue-600 font-mono text-sm">${m.printer}</span>
+                        <button onclick="navigator.clipboard.writeText(decodeURIComponent('${encodeURIComponent(m.name)}'))" class="text-slate-400 hover:text-slate-700 ml-1 transition-colors" title="Copy Printer Name">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
                     </div>
                     <button onclick="deleteMapping(${m.id})" class="text-red-500 text-xs hover:text-red-700 font-bold px-2">X</button>
                 </div>
